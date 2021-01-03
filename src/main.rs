@@ -4,6 +4,10 @@ use std::time::{Duration, Instant};
 
 const COLOR_ORANGE_DARK: Color = Color {r: 242.0/255.0, g: 125.0/255.0, b: 0.0/255.0, a: 1.0};
 const COLOR_ORANGE_LIGHT: Color = Color {r: 255.0/255.0, g: 172.0/255.0, b: 84.0/255.0, a: 1.0};
+
+const COLOR_RED_DARK: Color = Color {r: 200.0/255.0, g: 0.0/255.0, b: 0.0/255.0, a: 1.0};
+const COLOR_RED_LIGHT: Color = Color {r: 250.0/255.0, g: 0.0/255.0, b: 0.0/255.0, a: 1.0};
+
 const COLOR_WHITE: Color = ggez::graphics::WHITE;
 
 // Here we're defining how many quickly we want our game to update. This will be
@@ -57,12 +61,23 @@ impl From<(i16, i16)> for GridPosition {
 #[derive(Clone, Copy, Debug)]
 enum BlockColor {
     ORANGE,
+    RED,
+}
+
+impl From<BlockColor> for (Color, Color) {
+    fn from(color: BlockColor) -> Self {
+        match color {
+            BlockColor::ORANGE => (COLOR_ORANGE_DARK, COLOR_ORANGE_LIGHT),
+            BlockColor::RED => (COLOR_RED_DARK, COLOR_RED_LIGHT)
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 struct Block {
     color: BlockColor,
     position: GridPosition,
+    offset: GridPosition,
     rect: graphics::Rect,
     outer_mesh: graphics::Mesh,
     inner_mesh: graphics::Mesh,
@@ -74,15 +89,18 @@ impl Block {
         let position = GridPosition::from((x, y));
         let rect = graphics::Rect::from(position);
 
+        let (dark_color, light_color) = color.into();
+
         let block = Block {
             color: color,
             position: position,
             rect: rect,
+            offset: (0, 0).into(),
             outer_mesh: graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
-                    rect, COLOR_ORANGE_DARK).unwrap(),
+                    rect, dark_color).unwrap(),
             inner_mesh: graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
                 graphics::Rect::new(rect.x+2.0, rect.y+2.0, BLOCK_INNER_SIZE, BLOCK_INNER_SIZE),
-                COLOR_ORANGE_LIGHT).unwrap(),
+                light_color).unwrap(),
             active: false,
         };
 
@@ -93,17 +111,20 @@ impl Block {
         Block::new(ctx, 0, 0, color)
     }
 
-    fn update(&mut self, ctx: &mut Context) {
+    fn update(&mut self, ctx: &mut Context, parent_position: GridPosition) {
         //self.rect.y = self.rect.y + FALLING_SPEED;
-        self.position.y += 1;
+        self.position.x = parent_position.x + self.offset.x;
+        self.position.y = parent_position.y + self.offset.y;
 
         self.rect = graphics::Rect::from(self.position);
 
+        let (dark_color, light_color) = self.color.into();
+
         self.outer_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(),
-            self.rect, COLOR_ORANGE_DARK).unwrap();
+            self.rect, dark_color).unwrap();
 
         self.inner_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(),
-            self.inner_rect(), COLOR_ORANGE_LIGHT).unwrap();
+            self.inner_rect(), light_color).unwrap();
     }
 
     fn draw(&self, ctx: &mut Context) -> GameResult<()> {
@@ -122,8 +143,8 @@ impl Block {
         self.active = true;
     }
 
-    fn set_position(&mut self, x: i16, y: i16) {
-        self.position = GridPosition::from((x, y));
+    fn set_offset(&mut self, x: i16, y: i16) {
+        self.offset = GridPosition::from((self.position.x + x, self.position.y + y));
         //self.rect = graphics::Rect::from(self.position);
 
         /*self.outer_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
@@ -137,6 +158,7 @@ impl Block {
 #[derive(Clone, Copy, Debug)]
 enum PieceKind {
     SQUARE,
+    TALL,
 }
 
 #[derive(Clone, Debug)]
@@ -145,6 +167,7 @@ struct Piece {
     kind: PieceKind,
     color: BlockColor,
     blocks: Vec<Vec<Block>>,
+    active: bool,
 }
 
 impl Piece {
@@ -154,6 +177,7 @@ impl Piece {
             kind: kind,
             color: color,
             blocks: Vec::with_capacity(4),
+            active: true,
         };
 
         let row = vec![Block::empty(ctx, color); 4];
@@ -168,11 +192,19 @@ impl Piece {
                 p.blocks[1][0].activate();
                 p.blocks[1][1].activate();
 
-                for r in 0..4 {
-                    for c in 0..4 {
-                        p.blocks[r][c].set_position(x + r as i16, y + c as i16);
-                    }
-                }
+                
+            },
+            PieceKind::TALL => {
+                p.blocks[0][0].activate();
+                p.blocks[0][1].activate();
+                p.blocks[0][2].activate();
+                p.blocks[0][3].activate();
+            }
+        }
+
+        for r in 0..4 {
+            for c in 0..4 {
+                p.blocks[r][c].set_offset(r as i16, c as i16);
             }
         }
         
@@ -180,16 +212,24 @@ impl Piece {
     }
 
     fn new_random(ctx: &mut Context) -> Piece {
-        let p = Piece::new(ctx, 4, 0, PieceKind::SQUARE, BlockColor::ORANGE);
+        let p = Piece::new(ctx, 4, 0, PieceKind::TALL, BlockColor::RED);
         p
     }
 
     fn update(&mut self, ctx: &mut Context) {
+        if !self.active{ return; }
+
+        self.position.y += 1;
         for r in 0..4 {
             for c in 0..4 {
-                self.blocks[r][c].update(ctx);
+                self.blocks[r][c].update(ctx, self.position);
+
+                if self.blocks[r][c].position.y + 1 == GRID_COLS as i16 {
+                    self.active = false;
+                }
             }
         }
+        println!("x: {} , y: {}", self.position.x, self.position.y);
     }
 
     fn draw(&self, ctx: &mut Context) -> GameResult<()> {
