@@ -1,6 +1,8 @@
 use ggez::*;
 use ggez::graphics::Color;
 use std::time::{Duration, Instant};
+use rand::distributions::{Distribution, Standard};
+use rand::Rng;
 
 const COLOR_ORANGE_DARK: Color = Color {r: 242.0/255.0, g: 125.0/255.0, b: 0.0/255.0, a: 1.0};
 const COLOR_ORANGE_LIGHT: Color = Color {r: 255.0/255.0, g: 172.0/255.0, b: 84.0/255.0, a: 1.0};
@@ -74,9 +76,16 @@ impl From<BlockColor> for (Color, Color) {
     }
 }
 
+fn color_for_kind(kind: PieceKind) -> (Color, Color) {
+    match kind {
+        PieceKind::SQUARE => (COLOR_ORANGE_DARK, COLOR_ORANGE_LIGHT),
+        PieceKind::TALL => (COLOR_RED_DARK, COLOR_RED_LIGHT),
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Block {
-    color: BlockColor,
+    kind: PieceKind,
     position: GridPosition,
     offset: GridPosition,
     rect: graphics::Rect,
@@ -87,14 +96,14 @@ struct Block {
 }
 
 impl Block {
-    pub fn new(ctx: &mut Context, x: i16, y: i16, color: BlockColor) -> Block {
+    pub fn new(ctx: &mut Context, x: i16, y: i16, kind: PieceKind) -> Block {
         let position = GridPosition::from((x, y));
         let rect = graphics::Rect::from(position);
 
-        let (dark_color, light_color) = color.into();
+        let (dark_color, light_color) = color_for_kind(kind);
 
         let block = Block {
-            color: color,
+            kind: kind,
             position: position,
             rect: rect,
             offset: (0, 0).into(),
@@ -103,15 +112,15 @@ impl Block {
             inner_mesh: graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
                 graphics::Rect::new(rect.x+2.0, rect.y+2.0, BLOCK_INNER_SIZE, BLOCK_INNER_SIZE),
                 light_color).unwrap(),
-            active: true,
+            active: false,
             render: false,
         };
 
         block
     }
 
-    pub fn empty(ctx: &mut Context, color: BlockColor) -> Block {
-        Block::new(ctx, 0, 0, color)
+    pub fn empty(ctx: &mut Context, kind: PieceKind) -> Block {
+        Block::new(ctx, 0, 0, kind)
     }
 
     fn update(&mut self, ctx: &mut Context, parent_position: GridPosition) {
@@ -122,7 +131,7 @@ impl Block {
 
         self.rect = graphics::Rect::from(self.position);
 
-        let (dark_color, light_color) = self.color.into();
+        let (dark_color, light_color) = color_for_kind(self.kind);
 
         self.outer_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(),
             self.rect, dark_color).unwrap();
@@ -151,6 +160,11 @@ impl Block {
         self.active = false;
     }
 
+    fn active_and_render(&mut self) {
+        self.render = true;
+        self.active = true;
+    }
+
     fn set_offset(&mut self, x: i16, y: i16) {
         self.offset = GridPosition::from((self.position.x + x, self.position.y + y));
     }
@@ -162,44 +176,49 @@ enum PieceKind {
     TALL,
 }
 
+impl Distribution<PieceKind> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PieceKind {
+        match rng.gen_range(0..2) {
+            0 => PieceKind::SQUARE,
+            _ => PieceKind::TALL,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Piece {
     position: GridPosition,
     kind: PieceKind,
-    color: BlockColor,
     blocks: Vec<Vec<Block>>,
     active: bool,
 }
 
 impl Piece {
-    fn new(ctx: &mut Context, x: i16, y: i16, kind: PieceKind, color: BlockColor) -> Piece {
+    fn new(ctx: &mut Context, x: i16, y: i16, kind: PieceKind) -> Piece {
         let mut p = Piece {
             position: GridPosition::from((x, y)),
             kind: kind,
-            color: color,
             blocks: Vec::with_capacity(4),
             active: true,
         };
 
-        let row = vec![Block::empty(ctx, color); 4];
+        let row = vec![Block::empty(ctx, kind); 4];
         for _ in 0..4 {
             p.blocks.push(row.clone());
         }
 
         match kind {
             PieceKind::SQUARE => {
-                p.blocks[0][0].do_render();
-                p.blocks[0][1].do_render();
-                p.blocks[1][0].do_render();
-                p.blocks[1][1].do_render();
-
-                
+                p.blocks[0][0].active_and_render();
+                p.blocks[0][1].active_and_render();
+                p.blocks[1][0].active_and_render();
+                p.blocks[1][1].active_and_render();
             },
             PieceKind::TALL => {
-                p.blocks[0][0].do_render();
-                p.blocks[0][1].do_render();
-                p.blocks[0][2].do_render();
-                p.blocks[0][3].do_render();
+                p.blocks[0][0].active_and_render();
+                p.blocks[0][1].active_and_render();
+                p.blocks[0][2].active_and_render();
+                p.blocks[0][3].active_and_render();
             }
         }
 
@@ -213,7 +232,8 @@ impl Piece {
     }
 
     fn new_random(ctx: &mut Context) -> Piece {
-        let p = Piece::new(ctx, 4, 0, PieceKind::TALL, BlockColor::RED);
+        let kind: PieceKind = rand::random();
+        let p = Piece::new(ctx, 4, 0, kind);
         p
     }
 
@@ -235,9 +255,16 @@ impl Piece {
         self.position.y += 1;
         for r in 0..4 {
             for c in 0..4 {
-                self.blocks[r][c].update(ctx, self.position);
+                let b = &mut self.blocks[r][c];
+                if !b.active { continue; }
 
-                if self.blocks[r][c].position.y + 1 == GRID_COLS as i16 {
+                b.update(ctx, self.position);
+                if b.position.y + 1 == GRID_COLS as i16 {
+                    self.active = false;
+                }
+                
+                if b.position.x < 10 && b.position.y < 19 && grid.cells[b.position.x as usize][b.position.y as usize + 1].occupied {
+                    println!("OCCUPIED");
                     self.active = false;
                 }
             }
@@ -317,7 +344,8 @@ impl GridCell {
 
     fn set_block(&mut self, ctx: &mut Context, block: &Block) {
         println!("Setting block with x: {}, y: {}", block.position.x, block.position.y);
-        self.block = Some(Block::new(ctx, block.position.x, block.position.y, BlockColor::ORANGE));
+        self.occupied = true;
+        self.block = Some(Block::new(ctx, block.position.x, block.position.y, block.kind));
         if let Some(block) = &mut self.block {
             block.set_inactive();
             block.do_render();
