@@ -13,15 +13,16 @@ const COLOR_WHITE: Color = ggez::graphics::WHITE;
 // Here we're defining how many quickly we want our game to update. This will be
 // important later so that we don't have our snake fly across the screen because
 // it's moving a full tile every frame.
-const UPDATES_PER_SECOND: f32 = 1.0;
+const UPDATES_PER_SECOND: f32 = 3.0;
 // And we get the milliseconds of delay that this update rate corresponds to.
 const MILLIS_PER_UPDATE: u64 = (1.0 / UPDATES_PER_SECOND * 1000.0) as u64;
 
 const BLOCK_SIZE: f32 = 32.0;
 const BLOCK_INNER_SIZE: f32 = BLOCK_SIZE - 1.0;
 
-const GRID_COLS: usize = 20;
+// grid[rows][cols]
 const GRID_ROWS: usize = 10;
+const GRID_COLS: usize = 20;
 const GRID_SIZE: f32 = BLOCK_SIZE + 4.0;
 const GRID_POS_X: f32 = 250.0;
 const GRID_POS_Y: f32 = 80.0;
@@ -82,6 +83,7 @@ struct Block {
     outer_mesh: graphics::Mesh,
     inner_mesh: graphics::Mesh,
     active: bool,
+    render: bool,
 }
 
 impl Block {
@@ -101,7 +103,8 @@ impl Block {
             inner_mesh: graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
                 graphics::Rect::new(rect.x+2.0, rect.y+2.0, BLOCK_INNER_SIZE, BLOCK_INNER_SIZE),
                 light_color).unwrap(),
-            active: false,
+            active: true,
+            render: false,
         };
 
         block
@@ -112,7 +115,8 @@ impl Block {
     }
 
     fn update(&mut self, ctx: &mut Context, parent_position: GridPosition) {
-        //self.rect.y = self.rect.y + FALLING_SPEED;
+        if !self.active { return; }
+
         self.position.x = parent_position.x + self.offset.x;
         self.position.y = parent_position.y + self.offset.y;
 
@@ -128,7 +132,7 @@ impl Block {
     }
 
     fn draw(&self, ctx: &mut Context) -> GameResult<()> {
-        if self.active {
+        if self.render {
             graphics::draw(ctx, &self.outer_mesh, graphics::DrawParam::default()).unwrap();
             graphics::draw(ctx, &self.inner_mesh, graphics::DrawParam::default()).unwrap();
         }
@@ -139,19 +143,16 @@ impl Block {
         graphics::Rect::new(self.rect.x+2.0, self.rect.y+2.0, BLOCK_INNER_SIZE, BLOCK_INNER_SIZE)
     }
 
-    fn activate(&mut self) {
-        self.active = true;
+    fn do_render(&mut self) {
+        self.render = true;
+    }
+
+    fn set_inactive(&mut self) {
+        self.active = false;
     }
 
     fn set_offset(&mut self, x: i16, y: i16) {
         self.offset = GridPosition::from((self.position.x + x, self.position.y + y));
-        //self.rect = graphics::Rect::from(self.position);
-
-        /*self.outer_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
-            self.rect, COLOR_ORANGE_DARK).unwrap();
-
-        self.inner_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
-            self.inner_rect(), COLOR_ORANGE_LIGHT).unwrap();*/
     }
 }
 
@@ -187,18 +188,18 @@ impl Piece {
 
         match kind {
             PieceKind::SQUARE => {
-                p.blocks[0][0].activate();
-                p.blocks[0][1].activate();
-                p.blocks[1][0].activate();
-                p.blocks[1][1].activate();
+                p.blocks[0][0].do_render();
+                p.blocks[0][1].do_render();
+                p.blocks[1][0].do_render();
+                p.blocks[1][1].do_render();
 
                 
             },
             PieceKind::TALL => {
-                p.blocks[0][0].activate();
-                p.blocks[0][1].activate();
-                p.blocks[0][2].activate();
-                p.blocks[0][3].activate();
+                p.blocks[0][0].do_render();
+                p.blocks[0][1].do_render();
+                p.blocks[0][2].do_render();
+                p.blocks[0][3].do_render();
             }
         }
 
@@ -216,7 +217,19 @@ impl Piece {
         p
     }
 
-    fn update(&mut self, ctx: &mut Context) {
+    fn update_fast(&mut self, ctx: &mut Context) {
+        for r in 0..4 {
+            for c in 0..4 {
+                self.blocks[r][c].update(ctx, self.position);
+
+                if self.blocks[r][c].position.y + 1 == GRID_COLS as i16 {
+                    self.active = false;
+                }
+            }
+        }
+    }
+
+    fn update(&mut self, ctx: &mut Context, grid: &mut Grid) {
         if !self.active{ return; }
 
         self.position.y += 1;
@@ -229,7 +242,23 @@ impl Piece {
                 }
             }
         }
-        println!("x: {} , y: {}", self.position.x, self.position.y);
+
+        // Piece is now dead
+        if !self.active {
+            for r in 0..4 {
+                for c in 0..4 {
+                    if !self.blocks[r][c].render {continue;}
+
+                    let mut pos = self.blocks[r][c].position;
+                    println!("Dying at {}, {}", pos.x, pos.y);
+                    pos.x = if pos.x >= GRID_ROWS as i16 { GRID_ROWS as i16 - 1 } else { pos.x };
+                    pos.y = if pos.y >= GRID_COLS as i16 { GRID_COLS as i16 - 1 } else { pos.y };
+                    println!("Actualized to {}, {}", pos.x, pos.y);
+
+                    grid.cells[pos.x as usize][pos.y as usize].set_block(ctx, &self.blocks[r][c]);
+                }
+            }
+        }
     }
 
     fn draw(&self, ctx: &mut Context) -> GameResult<()> {
@@ -240,13 +269,22 @@ impl Piece {
         }
         Ok(())
     }
+
+    fn move_left(&mut self) {
+        self.position.x -= 1;
+    }
+
+    fn move_right(&mut self) {
+        self.position.x += 1;
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct GridCell {
     position: GridPosition,
     rect: graphics::Rect,
-    occupied: bool
+    occupied: bool,
+    block: Option<Block>
 }
 
 impl GridCell {
@@ -255,6 +293,7 @@ impl GridCell {
             position: (0, 0).into(),
             rect: graphics::Rect::zero(),
             occupied: false,
+            block: None
         }
     }
 
@@ -264,12 +303,25 @@ impl GridCell {
 
         graphics::draw(ctx, &rectangle, graphics::DrawParam::default()).unwrap();
 
+        if let Some(block) = &self.block {
+            block.draw(ctx)?;
+        }
+
         Ok(())
     }
 
     fn set_position(&mut self, x: i16, y: i16) {
         self.position = (x, y).into();
         self.rect = self.position.into();
+    }
+
+    fn set_block(&mut self, ctx: &mut Context, block: &Block) {
+        println!("Setting block with x: {}, y: {}", block.position.x, block.position.y);
+        self.block = Some(Block::new(ctx, block.position.x, block.position.y, BlockColor::ORANGE));
+        if let Some(block) = &mut self.block {
+            block.set_inactive();
+            block.do_render();
+        }
     }
 }
 
@@ -315,7 +367,7 @@ impl Grid {
 struct State {
     dt: std::time::Duration,
     last_update: Instant,
-    piece: Piece,
+    piece: Option<Piece>,
     grid: Grid,
 }
 
@@ -325,7 +377,7 @@ impl State {
         State {
             dt: std::time::Duration::new(0, 0),
             last_update: Instant::now(),
-            piece: Piece::new_random(ctx),
+            piece: Some(Piece::new_random(ctx)),
             grid: Grid::new(GRID_POS_X, GRID_POS_Y),
         }
     }
@@ -336,9 +388,20 @@ impl ggez::event::EventHandler for State {
         self.dt = timer::delta(ctx);
 
         if Instant::now() - self.last_update >= Duration::from_millis(MILLIS_PER_UPDATE) {
-            self.piece.update(ctx);
+            if let Some(piece) = &mut self.piece {
+                piece.update(ctx, &mut self.grid);
+
+                if !piece.active {
+                    self.piece = Some(Piece::new_random(ctx));
+                }
+            }
+            
 
             self.last_update = Instant::now();
+        } else {
+            if let Some(piece) = &mut self.piece {
+                piece.update_fast(ctx);
+            }
         }
         
         Ok(())
@@ -348,10 +411,29 @@ impl ggez::event::EventHandler for State {
         graphics::clear(ctx, [0.1, 0.1, 0.1, 1.0].into());
 
         self.grid.draw(ctx)?;
-        self.piece.draw(ctx)?;
+
+        if let Some(piece) = &self.piece {
+            piece.draw(ctx)?;
+        }
         
         graphics::present(ctx)?;
         Ok(())
+  }
+
+  fn key_down_event(&mut self, ctx: &mut Context, keycode: ggez::event::KeyCode, _keymods: ggez::event::KeyMods, _repeat: bool) {
+    match keycode {
+        ggez::event::KeyCode::Right => {
+            if let Some(piece) = &mut self.piece {
+                piece.move_right();
+            }
+        },
+        ggez::event::KeyCode::Left => {
+            if let Some(piece) = &mut self.piece {
+                piece.move_left();
+            }
+        },
+        _ => {}
+    }
   }
 }
 
