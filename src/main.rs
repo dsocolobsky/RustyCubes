@@ -424,12 +424,16 @@ impl ggez::event::EventHandler for State {
     match keycode {
         ggez::event::KeyCode::Right => {
             if let Some(piece) = &mut self.piece {
-                piece.move_right();
+                if piece.position.x < GRID_ROWS as i16 - 1 {
+                    piece.move_right();
+                }
             }
         },
         ggez::event::KeyCode::Left => {
             if let Some(piece) = &mut self.piece {
-                piece.move_left();
+                if piece.position.x > 0 {
+                    piece.move_left();
+                }
             }
         },
         _ => {}
