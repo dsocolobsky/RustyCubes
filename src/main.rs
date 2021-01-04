@@ -62,6 +62,12 @@ impl From<(i16, i16)> for GridPosition {
 }
 
 #[derive(Clone, Copy, Debug)]
+enum Direction {
+    LEFT,
+    RIGHT
+}
+
+#[derive(Clone, Copy, Debug)]
 enum BlockColor {
     ORANGE,
     RED,
@@ -411,6 +417,24 @@ impl State {
     }
 }
 
+impl State {
+    fn can_move(&self, direction: Direction) -> bool {
+        let idx = match direction {Direction::LEFT => -1, Direction::RIGHT => 1};
+        for r in 0..4 {
+            for c in 0..4 {
+                if let Some(piece) = &self.piece {
+                    let pos = piece.blocks[r][c].position;
+                    let px = (pos.x + idx) as usize;
+                    if self.grid.cells[px][pos.y as usize].occupied {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+}
+
 impl ggez::event::EventHandler for State {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         self.dt = timer::delta(ctx);
@@ -452,7 +476,7 @@ impl ggez::event::EventHandler for State {
     match keycode {
         ggez::event::KeyCode::Right => {
             if let Some(piece) = &mut self.piece {
-                if piece.position.x < GRID_ROWS as i16 - 1 {
+                if piece.position.x < GRID_ROWS as i16 - 1 && self.can_move(Direction::RIGHT) {
                     piece.move_right();
                 }
             }
@@ -467,6 +491,7 @@ impl ggez::event::EventHandler for State {
         _ => {}
     }
   }
+
 }
 
 fn main() {
