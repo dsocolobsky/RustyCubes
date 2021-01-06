@@ -61,7 +61,7 @@ impl From<(i16, i16)> for GridPosition {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Direction {
     LEFT,
     RIGHT
@@ -415,24 +415,33 @@ impl State {
             grid: Grid::new(GRID_POS_X, GRID_POS_Y),
         }
     }
+
+    
 }
 
-impl State {
-    fn can_move(&self, direction: Direction) -> bool {
-        let idx = match direction {Direction::LEFT => -1, Direction::RIGHT => 1};
-        for r in 0..4 {
-            for c in 0..4 {
-                if let Some(piece) = &self.piece {
-                    let pos = piece.blocks[r][c].position;
-                    let px = (pos.x + idx) as usize;
-                    if self.grid.cells[px][pos.y as usize].occupied {
-                        return false;
-                    }
-                }
+fn can_move(piece: &Piece, grid: &Grid, direction: Direction) -> bool {
+    let idx;
+    if direction == Direction::RIGHT {
+        if piece.position.x >= GRID_ROWS as i16 - 1 {
+            return false;
+        }
+        idx = -1;
+    } else {
+        if piece.position.x <= 0 {
+            return false;
+        }
+        idx = 1;
+    }
+    for r in 0..4 {
+        for c in 0..4 {
+            let pos = piece.blocks[r][c].position;
+            let px = (pos.x + idx) as usize;
+            if px > 0 && px < GRID_ROWS && grid.cells[px][pos.y as usize].occupied {
+                return false;
             }
         }
-        true
     }
+    true
 }
 
 impl ggez::event::EventHandler for State {
@@ -476,14 +485,14 @@ impl ggez::event::EventHandler for State {
     match keycode {
         ggez::event::KeyCode::Right => {
             if let Some(piece) = &mut self.piece {
-                if piece.position.x < GRID_ROWS as i16 - 1 && self.can_move(Direction::RIGHT) {
+                if can_move(&piece, &self.grid, Direction::RIGHT) {
                     piece.move_right();
                 }
             }
         },
         ggez::event::KeyCode::Left => {
             if let Some(piece) = &mut self.piece {
-                if piece.position.x > 0 {
+                if can_move(&piece, &self.grid, Direction::LEFT) {
                     piece.move_left();
                 }
             }
