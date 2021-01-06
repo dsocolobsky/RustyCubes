@@ -420,24 +420,32 @@ impl State {
 }
 
 fn can_move(piece: &Piece, grid: &Grid, direction: Direction) -> bool {
-    let idx;
-    if direction == Direction::RIGHT {
-        if piece.position.x >= GRID_ROWS as i16 - 1 {
-            return false;
-        }
-        idx = -1;
-    } else {
-        if piece.position.x <= 0 {
-            return false;
-        }
-        idx = 1;
+    if direction == Direction::RIGHT && (piece.position.x >= GRID_ROWS as i16 - 1) {
+        return false;
+    } else if direction == Direction::LEFT && piece.position.x <= 0 {
+        return false;
     }
+    
     for r in 0..4 {
         for c in 0..4 {
+            if !piece.blocks[r][c].active { continue; }
             let pos = piece.blocks[r][c].position;
-            let px = (pos.x + idx) as usize;
-            if px > 0 && px < GRID_ROWS && grid.cells[px][pos.y as usize].occupied {
-                return false;
+            let py = pos.y as usize;
+            if direction == Direction::LEFT {
+                if pos.x == 0 {
+                    println!("px is 0 !");
+                    return false
+                }
+                let px = (pos.x - 1) as usize;
+                if grid.cells[px][py].occupied {
+                    println!("{} is occupied!", px);
+                    return false
+                }
+            } else {
+                let px = (pos.x + 1) as usize;
+                if px > GRID_ROWS || grid.cells[px][py].occupied {
+                    return false
+                }
             }
         }
     }
