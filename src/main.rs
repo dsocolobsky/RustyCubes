@@ -4,18 +4,34 @@ use std::time::{Duration, Instant};
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
 
-const COLOR_ORANGE_DARK: Color = Color {r: 242.0/255.0, g: 125.0/255.0, b: 0.0/255.0, a: 1.0};
-const COLOR_ORANGE_LIGHT: Color = Color {r: 255.0/255.0, g: 172.0/255.0, b: 84.0/255.0, a: 1.0};
+const COLOR_CYAN_LIGHT: Color = Color {r: 50.0/255.0, g: 200.0/255.0, b: 240.0/255.0, a: 1.0};
+const COLOR_CYAN_DARK: Color = Color {r: 25.0/255.0, g: 175.0/255.0, b: 215.0/255.0, a: 1.0};
 
-const COLOR_RED_DARK: Color = Color {r: 200.0/255.0, g: 0.0/255.0, b: 0.0/255.0, a: 1.0};
-const COLOR_RED_LIGHT: Color = Color {r: 250.0/255.0, g: 0.0/255.0, b: 0.0/255.0, a: 1.0};
+const COLOR_BLUE_LIGHT: Color = Color {r: 108.0/255.0, g: 125.0/255.0, b: 200.0/255.0, a: 1.0};
+const COLOR_BLUE_DARK: Color = Color {r: 70.0/255.0, g: 85.0/255.0, b: 160.0/255.0, a: 1.0};
+
+const COLOR_ORANGE_LIGHT: Color = Color {r: 255.0/255.0, g: 140.0/255.0, b: 55.0/255.0, a: 1.0};
+const COLOR_ORANGE_DARK: Color = Color {r: 225.0/255.0, g: 105.0/255.0, b: 20.0/255.0, a: 1.0};
+
+const COLOR_YELLOW_LIGHT: Color = Color {r: 255.0/255.0, g: 232.0/255.0, b: 25.0/255.0, a: 1.0};
+const COLOR_YELLOW_DARK: Color = Color {r: 230.0/255.0, g: 195.0/255.0, b: 0.0/255.0, a: 1.0};
+
+const COLOR_GREEN_LIGHT: Color = Color {r: 80.0/255.0, g: 200.0/255.0, b: 80.0/255.0, a: 1.0};
+const COLOR_GREEN_DARK: Color = Color {r: 45.0/255.0, g: 165.0/255.0, b: 45.0/255.0, a: 1.0};
+
+const COLOR_PURPLE_LIGHT: Color = Color {r: 195.0/255.0, g: 92.0/255.0, b: 175.0/255.0, a: 1.0};
+const COLOR_PURPLE_DARK: Color = Color {r: 150.0/255.0, g: 60.0/255.0, b: 135.0/255.0, a: 1.0};
+
+const COLOR_RED_LIGHT: Color = Color {r: 255.0/255.0, g: 65.0/255.0, b: 70.0/255.0, a: 1.0};
+const COLOR_RED_DARK: Color = Color {r: 215.0/255.0, g: 20.0/255.0, b: 25.0/255.0, a: 1.0};
+
 
 const COLOR_WHITE: Color = ggez::graphics::WHITE;
 
 // Here we're defining how many quickly we want our game to update. This will be
 // important later so that we don't have our snake fly across the screen because
 // it's moving a full tile every frame.
-const UPDATES_PER_SECOND: f32 = 3.0;
+const UPDATES_PER_SECOND: f32 = 6.0;
 // And we get the milliseconds of delay that this update rate corresponds to.
 const MILLIS_PER_UPDATE: u64 = (1.0 / UPDATES_PER_SECOND * 1000.0) as u64;
 
@@ -31,8 +47,6 @@ const GRID_POS_Y: f32 = 80.0;
 
 const WINDOW_WIDTH: f32 = 1024.0;
 const WINDOW_HEIGHT: f32 = 920.0;
-
-const PIECE_ROWS: usize = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct GridPosition {
@@ -68,24 +82,25 @@ enum Direction {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum BlockColor {
-    ORANGE,
-    RED,
-}
-
-impl From<BlockColor> for (Color, Color) {
-    fn from(color: BlockColor) -> Self {
-        match color {
-            BlockColor::ORANGE => (COLOR_ORANGE_DARK, COLOR_ORANGE_LIGHT),
-            BlockColor::RED => (COLOR_RED_DARK, COLOR_RED_LIGHT)
-        }
-    }
+enum PieceKind {
+    I,
+    J,
+    L,
+    O,
+    S,
+    T,
+    Z,
 }
 
 fn color_for_kind(kind: PieceKind) -> (Color, Color) {
     match kind {
-        PieceKind::SQUARE => (COLOR_ORANGE_DARK, COLOR_ORANGE_LIGHT),
-        PieceKind::TALL => (COLOR_RED_DARK, COLOR_RED_LIGHT),
+        PieceKind::I => (COLOR_CYAN_DARK, COLOR_CYAN_LIGHT),
+        PieceKind::J => (COLOR_BLUE_DARK, COLOR_BLUE_LIGHT),
+        PieceKind::L => (COLOR_ORANGE_DARK, COLOR_ORANGE_LIGHT),
+        PieceKind::O => (COLOR_YELLOW_DARK, COLOR_YELLOW_LIGHT),
+        PieceKind::S => (COLOR_GREEN_DARK, COLOR_GREEN_LIGHT),
+        PieceKind::T => (COLOR_PURPLE_DARK, COLOR_PURPLE_LIGHT),
+        PieceKind::Z => (COLOR_RED_DARK, COLOR_RED_LIGHT),
     }
 }
 
@@ -176,17 +191,18 @@ impl Block {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum PieceKind {
-    SQUARE,
-    TALL,
-}
+
 
 impl Distribution<PieceKind> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PieceKind {
-        match rng.gen_range(0..2) {
-            0 => PieceKind::SQUARE,
-            _ => PieceKind::TALL,
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PieceKind { // I J L O S T Z
+        match rng.gen_range(0..7) {
+            0 => PieceKind::I,
+            1 => PieceKind::J,
+            2 => PieceKind::L,
+            3 => PieceKind::O,
+            4 => PieceKind::S,
+            5 => PieceKind::T,
+            _ => PieceKind::Z,
         }
     }
 }
@@ -214,18 +230,48 @@ impl Piece {
         }
 
         match kind {
-            PieceKind::SQUARE => {
+            PieceKind::I => {
+                p.blocks[0][0].active_and_render();
+                p.blocks[1][0].active_and_render();
+                p.blocks[2][0].active_and_render();
+                p.blocks[3][0].active_and_render();
+            },
+            PieceKind::J => {
+                p.blocks[0][0].active_and_render();
+                p.blocks[0][1].active_and_render();
+                p.blocks[1][1].active_and_render();
+                p.blocks[2][1].active_and_render();
+            },
+            PieceKind::L => {
+                p.blocks[2][0].active_and_render();
+                p.blocks[0][1].active_and_render();
+                p.blocks[1][1].active_and_render();
+                p.blocks[2][1].active_and_render();
+            },
+            PieceKind::O => {
                 p.blocks[0][0].active_and_render();
                 p.blocks[0][1].active_and_render();
                 p.blocks[1][0].active_and_render();
                 p.blocks[1][1].active_and_render();
             },
-            PieceKind::TALL => {
-                p.blocks[0][0].active_and_render();
+            PieceKind::S => {
+                p.blocks[1][0].active_and_render();
+                p.blocks[2][0].active_and_render();
                 p.blocks[0][1].active_and_render();
-                p.blocks[0][2].active_and_render();
-                p.blocks[0][3].active_and_render();
-            }
+                p.blocks[1][1].active_and_render();
+            },
+            PieceKind::T => {
+                p.blocks[1][0].active_and_render();
+                p.blocks[0][1].active_and_render();
+                p.blocks[1][1].active_and_render();
+                p.blocks[2][1].active_and_render();
+            },
+            PieceKind::Z => {
+                p.blocks[0][0].active_and_render();
+                p.blocks[1][0].active_and_render();
+                p.blocks[1][1].active_and_render();
+                p.blocks[2][1].active_and_render();
+            },
         }
 
         for r in 0..4 {
@@ -420,6 +466,7 @@ impl State {
 }
 
 fn can_move(piece: &Piece, grid: &Grid, direction: Direction) -> bool {
+    println!("=====================================================");
     if direction == Direction::RIGHT && (piece.position.x >= GRID_ROWS as i16 - 1) {
         return false;
     } else if direction == Direction::LEFT && piece.position.x <= 0 {
@@ -430,6 +477,7 @@ fn can_move(piece: &Piece, grid: &Grid, direction: Direction) -> bool {
         for c in 0..4 {
             if !piece.blocks[r][c].active { continue; }
             let pos = piece.blocks[r][c].position;
+            println!("[x: {}, y: {}]", pos.x, pos.y);
             let py = pos.y as usize;
             if direction == Direction::LEFT {
                 if pos.x == 0 {
@@ -443,12 +491,13 @@ fn can_move(piece: &Piece, grid: &Grid, direction: Direction) -> bool {
                 }
             } else {
                 let px = (pos.x + 1) as usize;
-                if px > GRID_ROWS || grid.cells[px][py].occupied {
+                if px == 10 || grid.cells[px][py].occupied {
                     return false
                 }
             }
         }
     }
+    println!("=====================================================");
     true
 }
 
