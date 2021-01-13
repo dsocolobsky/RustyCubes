@@ -186,6 +186,11 @@ impl Block {
         self.active = true;
     }
 
+    fn deactivate(&mut self) {
+        self.render = false;
+        self.active = false;
+    }
+
     fn set_offset(&mut self, x: i16, y: i16) {
         self.offset = GridPosition::from((self.position.x + x, self.position.y + y));
     }
@@ -213,6 +218,8 @@ struct Piece {
     kind: PieceKind,
     blocks: Vec<Vec<Block>>,
     active: bool,
+    rotation: i8,
+    num_rotations: i8,
 }
 
 impl Piece {
@@ -222,6 +229,8 @@ impl Piece {
             kind: kind,
             blocks: Vec::with_capacity(4),
             active: true,
+            rotation: 0,
+            num_rotations: 2,
         };
 
         let row = vec![Block::empty(ctx, kind); 4];
@@ -229,50 +238,13 @@ impl Piece {
             p.blocks.push(row.clone());
         }
 
-        match kind {
-            PieceKind::I => {
-                p.blocks[0][0].active_and_render();
-                p.blocks[1][0].active_and_render();
-                p.blocks[2][0].active_and_render();
-                p.blocks[3][0].active_and_render();
-            },
-            PieceKind::J => {
-                p.blocks[0][0].active_and_render();
-                p.blocks[0][1].active_and_render();
-                p.blocks[1][1].active_and_render();
-                p.blocks[2][1].active_and_render();
-            },
-            PieceKind::L => {
-                p.blocks[2][0].active_and_render();
-                p.blocks[0][1].active_and_render();
-                p.blocks[1][1].active_and_render();
-                p.blocks[2][1].active_and_render();
-            },
-            PieceKind::O => {
-                p.blocks[0][0].active_and_render();
-                p.blocks[0][1].active_and_render();
-                p.blocks[1][0].active_and_render();
-                p.blocks[1][1].active_and_render();
-            },
-            PieceKind::S => {
-                p.blocks[1][0].active_and_render();
-                p.blocks[2][0].active_and_render();
-                p.blocks[0][1].active_and_render();
-                p.blocks[1][1].active_and_render();
-            },
-            PieceKind::T => {
-                p.blocks[1][0].active_and_render();
-                p.blocks[0][1].active_and_render();
-                p.blocks[1][1].active_and_render();
-                p.blocks[2][1].active_and_render();
-            },
-            PieceKind::Z => {
-                p.blocks[0][0].active_and_render();
-                p.blocks[1][0].active_and_render();
-                p.blocks[1][1].active_and_render();
-                p.blocks[2][1].active_and_render();
-            },
-        }
+        p.num_rotations = match kind {
+            PieceKind::O => 1,
+            PieceKind::I | PieceKind::S | PieceKind::Z => 2,
+            PieceKind::J | PieceKind::L | PieceKind::T => 4,
+        };
+
+        p.set_rotation(0i8);
 
         for r in 0..4 {
             for c in 0..4 {
@@ -356,6 +328,182 @@ impl Piece {
     fn move_right(&mut self) {
         self.position.x += 1;
     }
+
+    fn deactivate_all_blocks(&mut self) {
+        for r in 0..4 {
+            for c in 0..4 {
+                self.blocks[r][c].deactivate();
+            }
+        }
+    }
+
+    fn set_rotation(&mut self, rotation: i8) {
+        println!("Rotation: {}", rotation);
+        self.rotation = rotation;
+        self.deactivate_all_blocks();
+        match self.kind {
+            PieceKind::I => {
+                match rotation {
+                    0 => { // Horizontal ------
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[3][1].active_and_render();
+                    },
+                    1 => { // Vertical
+                        self.blocks[2][0].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[2][2].active_and_render();
+                        self.blocks[2][3].active_and_render();
+                    },
+                    _ => (),
+                };
+            },
+            PieceKind::J => {
+                match rotation {
+                    0 => {
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[0][2].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                        self.blocks[2][2].active_and_render();
+                    },
+                    1 => {
+                        self.blocks[1][0].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                        self.blocks[2][2].active_and_render();
+                    },
+                    2 => {
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[0][2].active_and_render();
+                    },
+                    3 => {
+                        self.blocks[0][0].active_and_render();
+                        self.blocks[1][0].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    _ => (),
+                }
+            },
+            PieceKind::L => {
+                match rotation {
+                    0 => {
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[0][2].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                        self.blocks[2][2].active_and_render();
+                    },
+                    1 => {
+                        self.blocks[1][0].active_and_render();
+                        self.blocks[2][0].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    2 => {
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[2][2].active_and_render();
+                    },
+                    3 => {
+                        self.blocks[1][0].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[0][2].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    _ => (),
+                }
+            },
+            PieceKind::O => { // L, O, S, T, Z
+                match rotation {
+                    0 => {
+                        self.blocks[0][0].active_and_render();
+                        self.blocks[1][0].active_and_render();
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                    },
+                    _ => (),
+                }
+            },
+            PieceKind::S => {
+                match rotation {
+                    0 => {
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[0][2].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    1 => {
+                        self.blocks[0][0].active_and_render();
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    _ => (),
+                }
+            },
+            PieceKind::T => {
+                match rotation {
+                    0 => {
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[0][2].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                        self.blocks[2][2].active_and_render();
+                    },
+                    1 => {
+                        self.blocks[1][0].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    2 => {
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    3 => {
+                        self.blocks[1][0].active_and_render();
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    _ => (),
+                }
+            },
+            PieceKind::Z => {
+                match rotation {
+                    0 => {
+                        self.blocks[0][1].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                        self.blocks[2][2].active_and_render();
+                    },
+                    1 => {
+                        self.blocks[2][0].active_and_render();
+                        self.blocks[1][1].active_and_render();
+                        self.blocks[2][1].active_and_render();
+                        self.blocks[1][2].active_and_render();
+                    },
+                    _ => (),
+                }
+            },
+            _ => ()
+        } // end match self.kind
+    }
+
+    fn activate_next_rotation(&mut self) {
+        self.set_rotation(modulo(self.rotation+1, self.num_rotations));
+    }
+
+    fn activate_prev_rotation(&mut self) {
+        println!("Current rotation: {}", self.rotation);
+        self.set_rotation(modulo(self.rotation-1, self.num_rotations));
+    }
+
 }
 
 #[derive(Debug, Clone)]
@@ -554,10 +702,24 @@ impl ggez::event::EventHandler for State {
                 }
             }
         },
+        ggez::event::KeyCode::Z => {
+            if let Some(piece) = &mut self.piece {
+                piece.activate_prev_rotation();
+            }
+        },
+        ggez::event::KeyCode::X => {
+            if let Some(piece) = &mut self.piece {
+                piece.activate_next_rotation();
+            }
+        },
         _ => {}
     }
   }
 
+}
+
+fn modulo(x: i8, m: i8) -> i8 {
+    (x % m + m) % m
 }
 
 fn main() {
